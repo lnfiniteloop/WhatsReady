@@ -1,0 +1,10 @@
+{
+  "Name": "WhatsReady",
+  "Author": "lnfiniteloop",
+  "Version": "1.0.0",
+  "Description": "On button press, find all of the items ready for gathering/harveesting",
+  "UniqueID": "lnfiniteloop.WhatsReady",
+  "EntryDll": "WhatsReady.dll",
+  "MinimumApiVersion": "3.0.0",
+  "UpdateKeys": []
+}

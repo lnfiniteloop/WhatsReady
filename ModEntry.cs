@@ -18,9 +18,13 @@ namespace WhatsReady
 {
     class ModEntry : Mod
     {
+        private List<int> animalDroppingsIds = new List<int>() { 107, 436, 438, 437, 439, 440, 442, 444, 446, 174, 182, 180, 176 };
+        private List<int> animalDroppingCatIds = new List<int>() { -5, -6, -14, -17, -18 };
+
         public override void Entry(IModHelper helper)
         {
             helper.Events.Input.ButtonPressed += this.OnButtonPressed;
+            
         }
 
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
@@ -43,18 +47,18 @@ namespace WhatsReady
                 );
 
                 IDictionary<string, int> holdy = new Dictionary<string, int>();
-                IDictionary<string, int> last_holdy = new Dictionary<string, int>();
                 IDictionary<string, SObject> ready_items = new Dictionary<string, SObject>();
                 SObject ready_item;
+                
 
                 foreach (GameLocation location in locations)
-                    if (location.IsFarm)
+                    if ((location.IsFarm || location.IsGreenhouse) && location.Name != "FarmCave")
                     {
                         foreach (SObject obj in location.objects.Values)
                         {
-                            if (obj is Chest || !this.IsSpawnedWorldItem(obj))
+                            if (obj is Chest || !this.IsSpawnedWorldItem(obj)) 
                             {
-                                if (obj.readyForHarvest)
+                                if (obj.readyForHarvest) //machine items
                                 {
                                     //obj.heldObject.Value.displayName - crafting machine name
                                     //this.Monitor.Log($"{obj.Name} = {obj.Type} = {obj.readyForHarvest} = {obj.heldObject.Value.displayName}");
@@ -69,9 +73,47 @@ namespace WhatsReady
 
                                     holdy[ready_item.name]++;
                                 }
+
+                                if (obj.ParentSheetIndex == 165) //autograbber
+                                {
+                                    Chest objItems = (Chest)obj.heldObject.Value;
+                                    foreach(SObject item in objItems.items)
+                                    {
+                                        if (animalDroppingCatIds.Contains(item.Category) || animalDroppingsIds.Contains(item.parentSheetIndex))
+                                        {
+                                            {
+                                                ready_item = item;
+
+                                                if (!holdy.ContainsKey(ready_item.name))
+                                                {
+                                                    holdy.Add(ready_item.name, 0);
+                                                    ready_items.Add(ready_item.name, ready_item);
+                                                }
+
+                                                holdy[ready_item.name]++;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (animalDroppingCatIds.Contains(obj.Category) || animalDroppingsIds.Contains(obj.parentSheetIndex))
+                            {
+                                {
+                                    ready_item = obj;
+
+                                    if (!holdy.ContainsKey(ready_item.name))
+                                    {
+                                        holdy.Add(ready_item.name, 0);
+                                        ready_items.Add(ready_item.name, ready_item);
+                                    }
+
+                                    holdy[ready_item.name]++;
+                                }
                             }
 
                         }
+
                         IEnumerable<KeyValuePair<Vector2, TerrainFeature>> featurePairs = location.terrainFeatures.Pairs;
                         foreach (KeyValuePair<Vector2, TerrainFeature> keyValuePair in featurePairs)
                         {
@@ -106,7 +148,7 @@ namespace WhatsReady
                         SObject o = item.Value;
                         this.Monitor.Log($"{o.name}: {holdy[o.name]}");
                         SObject obj = new SObject(o.ParentSheetIndex, o.Stack, false, o.Price, o.quality);
-                        Game1.addHUDMessage(new HUDMessage($"{o.Name} ready", holdy[o.name], true, Color.Green, obj));
+                        Game1.addHUDMessage(new HUDMessage(o.Name, holdy[o.name], true, Color.Green, obj));
                     }
                 }
             }

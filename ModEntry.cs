@@ -120,18 +120,11 @@ namespace WhatsReady
         }
 
 
-
-        /// <summary>The method invoked when an object is added or removed to a location.</summary>
-        /// <param name="sender">The event sender.</param>
-        /// <param name="e">The event arguments.</param>
         private void OnObjectListChanged(object sender, ObjectListChangedEventArgs e)
         {
             this.Monitor.VerboseLog($"Object list changed in {e.Location.Name}, reloading its machines.");
         }
 
-        /// <summary>Get whether an item was spawned automatically. This is heuristic and only applies for items placed in the world, not items in an inventory.</summary>
-        /// <param name="item">The item to check.</param>
-        /// <remarks>Derived from the <see cref="SObject"/> constructors.</remarks>
         private bool IsSpawnedWorldItem(Item item)
         {
             return

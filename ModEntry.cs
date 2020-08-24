@@ -12,7 +12,7 @@ using StardewValley.Objects;
 using SObject = StardewValley.Object;
 using StardewValley.Menus;
 using StardewValley.TerrainFeatures;
-
+using StardewValley.Buildings;
 
 namespace WhatsReady
 {
@@ -25,6 +25,10 @@ namespace WhatsReady
         private bool showCaveItems;
         private bool showAnimalDroppings;
         private bool showHarvestableFlowers;
+        private IDictionary<string, int> holdy = new Dictionary<string, int>();
+        private IDictionary<string, int> holdy_previous = new Dictionary<string, int>();
+        private IDictionary<string, SObject> ready_items = new Dictionary<string, SObject>();
+        private SObject ready_item;
 
         public override void Entry(IModHelper helper)
         {
@@ -34,7 +38,46 @@ namespace WhatsReady
             showAnimalDroppings = this.cfg.showAnimalDroppings;
             showHarvestableFlowers = this.cfg.showHarvestableFlowers;
 
+            holdy.Clear();
+            holdy_previous.Clear();
+            ready_items.Clear();
+
             helper.Events.Input.ButtonPressed += this.OnButtonPressed;
+            helper.Events.GameLoop.TimeChanged += this.OnTimeChange;
+
+        }
+
+        private void OnTimeChange(object sender, TimeChangedEventArgs e)
+        {
+            // ignore if player hasn't loaded a save yet
+            if (!Context.IsWorldReady)
+                return;
+
+            holdy.Clear();
+            ready_items.Clear();
+
+            //Monitor.Log($"{e.NewTime.ToString()} time changed.", LogLevel.Debug);
+
+            foreach (GameLocation location in GetGameLocations())
+            {
+                if ((location is FarmCave && showCaveItems) || (!(location is FarmCave) && !showCaveItems))
+                {
+                    if (location.IsFarm || location.IsGreenhouse)
+                    {
+                        OverlaidDictionary.ValuesCollection locationObjects = GetLocationObjects(location);
+                        CheckMachineItems(locationObjects);
+                        CheckCrops(location);
+                        if (showAnimalDroppings)
+                            CheckAnimalDroppings(locationObjects);
+
+                    }
+                }
+            }
+
+            if (holdy.Count > 0)
+            {
+                ShowNotification();
+            }
             
         }
 
@@ -47,141 +90,176 @@ namespace WhatsReady
             if (e.Button.Equals(keyToCheck))
             {
                 // print button presses to the console window
-                this.Monitor.Log($"{Game1.player.Name} pressed {e.Button}.", LogLevel.Debug);
+                Monitor.Log($"{Game1.player.Name} pressed {e.Button}.", LogLevel.Debug);
 
-                IEnumerable<GameLocation> locations = Game1.locations
+                holdy.Clear();
+                holdy_previous.Clear();
+                ready_items.Clear();
+
+                foreach (GameLocation location in GetGameLocations())
+                {
+                    if ((location is FarmCave && showCaveItems) || (!(location is FarmCave) && !showCaveItems))
+                    {
+                        if (location.IsFarm || location.IsGreenhouse)
+                        {
+                            OverlaidDictionary.ValuesCollection locationObjects = GetLocationObjects(location);
+                            CheckMachineItems(locationObjects);
+                            CheckCrops(location);
+                            if (showAnimalDroppings)
+                                CheckAnimalDroppings(locationObjects);
+
+                        }
+                    }
+                }
+
+                if (holdy.Count > 0)
+                {
+                    ShowNotification();
+                }
+            }
+        }
+
+        private IEnumerable<GameLocation> GetGameLocations()
+        {
+            return Game1.locations
                 .Concat(
                     from location in Game1.locations.OfType<BuildableGameLocation>()
                     from building in location.buildings
                     where building.indoors.Value != null
                     select building.indoors.Value
                 );
+        }
 
-                IDictionary<string, int> holdy = new Dictionary<string, int>();
-                IDictionary<string, SObject> ready_items = new Dictionary<string, SObject>();
-                SObject ready_item;
-                
+        private OverlaidDictionary.ValuesCollection GetLocationObjects(GameLocation location)
+        {
+            return location.objects.Values;
+        }
 
-                foreach (GameLocation location in locations)
-                    if ((location.IsFarm || location.IsGreenhouse) && location.Name != "FarmCave")
-                    {
-                        foreach (SObject obj in location.objects.Values)
-                        {
-                            if (obj is Chest || !this.IsSpawnedWorldItem(obj)) 
-                            {
-                                if (obj.readyForHarvest) //machine items
-                                {
-                                    //obj.heldObject.Value.displayName - crafting machine name
-                                    //this.Monitor.Log($"{obj.Name} = {obj.Type} = {obj.readyForHarvest} = {obj.heldObject.Value.displayName}");
-                                    ready_item = obj.heldObject.Value;//obj.heldObject.Value.DisplayName;
-                                    //save object = obj.heldObject.Value
-
-                                    if (!holdy.ContainsKey(ready_item.name))
-                                    {
-                                        holdy.Add(ready_item.name, 0);
-                                        ready_items.Add(ready_item.name, ready_item);
-                                    }
-
-                                    holdy[ready_item.name]++;
-                                }
-
-                                if (showAnimalDroppings)
-                                {
-                                    if (obj.ParentSheetIndex == 165) //autograbber
-                                    {
-                                        Chest objItems = (Chest)obj.heldObject.Value;
-                                        foreach (SObject item in objItems.items)
-                                        {
-                                            if (animalDroppingCatIds.Contains(item.Category) || animalDroppingsIds.Contains(item.parentSheetIndex))
-                                            {
-                                                {
-                                                    ready_item = item;
-
-                                                    if (!holdy.ContainsKey(ready_item.name))
-                                                    {
-                                                        holdy.Add(ready_item.name, 0);
-                                                        ready_items.Add(ready_item.name, ready_item);
-                                                    }
-
-                                                    holdy[ready_item.name]++;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            //animal droppings
-                            if (showAnimalDroppings && (animalDroppingCatIds.Contains(obj.Category) || animalDroppingsIds.Contains(obj.parentSheetIndex)))
-                            {
-                                {
-                                    ready_item = obj;
-
-                                    if (!holdy.ContainsKey(ready_item.name))
-                                    {
-                                        holdy.Add(ready_item.name, 0);
-                                        ready_items.Add(ready_item.name, ready_item);
-                                    }
-
-                                    holdy[ready_item.name]++;
-                                }
-                            }
-
-                        }
-
-                        IEnumerable<KeyValuePair<Vector2, TerrainFeature>> featurePairs = location.terrainFeatures.Pairs;
-                        foreach (KeyValuePair<Vector2, TerrainFeature> keyValuePair in featurePairs)
-                        {
-                            if (keyValuePair.Value is HoeDirt)
-                            {
-                                var hoeDirt = (HoeDirt)keyValuePair.Value;
-                                if (hoeDirt.readyForHarvest())
-                                {
-                                    //showMessage("Crops readayyy");
-                                    //break;
-
-                                    SObject crop = GetItemByIndex(hoeDirt.crop.netSeedIndex);
-                                    if(showHarvestableFlowers || (!showHarvestableFlowers && crop.Category != -80))
-                                    {
-                                        if (!holdy.ContainsKey(crop.name))
-                                        {
-                                            holdy.Add(crop.name, 0);
-                                            ready_items.Add(crop.name, crop);
-                                        }
-
-                                        holdy[crop.name]++;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                if (holdy.Count > 0)
+        private void CheckMachineItems(OverlaidDictionary.ValuesCollection locationObjects)
+        {
+            foreach (SObject obj in locationObjects)
+            {
+                if (obj is Chest || !IsSpawnedWorldItem(obj))
                 {
-                    this.Monitor.Log("--- Ready items ---");
-
-                    foreach (KeyValuePair<string, SObject> item in ready_items)
+                    if (obj.readyForHarvest) //machine items
                     {
-                        SObject o = item.Value;
-                        this.Monitor.Log($"{o.name}: {holdy[o.name]}");
-                        SObject obj = new SObject(o.ParentSheetIndex, o.Stack, false, o.Price, o.quality);
-                        Game1.addHUDMessage(new HUDMessage(o.Name, holdy[o.name], true, Color.Green, obj));
+                        //obj.heldObject.Value.displayName - crafting machine name
+                        //this.Monitor.Log($"{obj.Name} = {obj.Type} = {obj.readyForHarvest} = {obj.heldObject.Value.displayName}");
+                        ready_item = obj.heldObject.Value;//obj.heldObject.Value.DisplayName;
+                                                          //save object = obj.heldObject.Value
+
+                        if (!holdy.ContainsKey(ready_item.name))
+                        {
+                            holdy.Add(ready_item.name, 0);
+                            ready_items.Add(ready_item.name, ready_item);
+                        }
+
+                        holdy[ready_item.name]++;
                     }
                 }
             }
         }
 
+        private void CheckAnimalDroppings(OverlaidDictionary.ValuesCollection locationObjects)
+        {
+            foreach (SObject obj in locationObjects)
+            {
+
+                if (obj.ParentSheetIndex == 165) //autograbber
+                {
+                    Chest objItems = (Chest)obj.heldObject.Value;
+                    foreach (SObject item in objItems.items)
+                    {
+                        
+                        if (animalDroppingCatIds.Contains(item.Category) || animalDroppingsIds.Contains(item.parentSheetIndex))
+                        {
+                            {
+                                ready_item = item;
+
+                                if (!holdy.ContainsKey(ready_item.name))
+                                {
+                                    holdy.Add(ready_item.name, 0);
+                                    ready_items.Add(ready_item.name, ready_item);
+                                }
+
+                                holdy[ready_item.name]++;
+                            }
+                        }
+                    }
+                }
+
+                //animal droppings
+                if (animalDroppingCatIds.Contains(obj.Category) || animalDroppingsIds.Contains(obj.parentSheetIndex))
+                {
+                    {
+                        ready_item = obj;
+
+                        if (!holdy.ContainsKey(ready_item.name))
+                        {
+                            holdy.Add(ready_item.name, 0);
+                            ready_items.Add(ready_item.name, ready_item);
+                        }
+
+                        holdy[ready_item.name]++;
+                    }
+                }
+            }
+        }
+
+        private void CheckCrops(GameLocation location)
+        {
+            IEnumerable<KeyValuePair<Vector2, TerrainFeature>> featurePairs = location.terrainFeatures.Pairs;
+            foreach (KeyValuePair<Vector2, TerrainFeature> keyValuePair in featurePairs)
+            {
+                if (keyValuePair.Value is HoeDirt)
+                {
+                    var hoeDirt = (HoeDirt)keyValuePair.Value;
+                    if (hoeDirt.readyForHarvest())
+                    {
+                        SObject crop = GetItemByIndex(hoeDirt.crop.indexOfHarvest);
+                        if (showHarvestableFlowers || (!showHarvestableFlowers && crop.Category != -80))
+                        {
+                            if (!holdy.ContainsKey(crop.name))
+                            {
+                                holdy.Add(crop.name, 0);
+                                ready_items.Add(crop.name, crop);
+                            }
+
+                            holdy[crop.name]++;
+                        }
+                    }
+                }
+            }
+        }
+
+        private void ShowNotification()
+        {
+            this.Monitor.Log("--- Ready items ---");
+
+            foreach (KeyValuePair<string, SObject> item in ready_items)
+            {
+
+                SObject o = item.Value;
+                if (!holdy_previous.ContainsKey(o.name))
+                {
+                    holdy_previous.Add(o.name, -1);
+                }
+
+                if ((holdy_previous[o.name] < holdy[o.name]))
+                {
+                    Monitor.Log($"{o.name}: {holdy[o.name]}");
+                    holdy_previous[o.name] = holdy[o.name];
+                    //SObject obj = new SObject(o.ParentSheetIndex, o.Stack, false, o.Price, o.quality);
+                    Game1.addHUDMessage(new HUDMessage(o.Name, holdy[o.name], true, Color.Green, o));
+                }
+
+            }
+        }
         public static void showMessage(string msg)
         {
             var hudmsg = new HUDMessage(msg, Color.SeaGreen, 5250f, true);
             hudmsg.whatType = 2;
             Game1.addHUDMessage(hudmsg);
-        }
-
-
-        private void OnObjectListChanged(object sender, ObjectListChangedEventArgs e)
-        {
-            this.Monitor.VerboseLog($"Object list changed in {e.Location.Name}, reloading its machines.");
         }
 
         private bool IsSpawnedWorldItem(Item item)

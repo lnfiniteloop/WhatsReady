@@ -6,5 +6,5 @@
   "UniqueID": "lnfiniteloop.WhatsReady",
   "EntryDll": "WhatsReady.dll",
   "MinimumApiVersion": "3.0.0",
-  "UpdateKeys": []
+  "UpdateKeys": [ "GitHub:lnfiniteloop/WhatsReady"]
 }

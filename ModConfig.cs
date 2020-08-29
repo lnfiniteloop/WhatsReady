@@ -14,13 +14,15 @@ namespace WhatsReady
         public bool showCaveItems { get; set; }
         public bool showAnimalDroppings { get; set; }
         public bool showHarvestableFlowers { get; set; }
+        public bool harvestTrufflesToGrabbers { get; set; }
 
         public ModConfig()
         {
             this.keyToCheck = SButton.F3;
-            this.showCaveItems = false;
+            this.showCaveItems = true;
             this.showAnimalDroppings = true;
             this.showHarvestableFlowers = false;
+            this.harvestTrufflesToGrabbers = true;
     }
     }
 }

@@ -21,10 +21,6 @@ namespace WhatsReady
         private List<int> animalDroppingsIds = new List<int>() { 107, 436, 438, 437, 439, 440, 442, 444, 446, 174, 182, 180, 176 };
         private List<int> animalDroppingCatIds = new List<int>() { -5, -6, -14, -17, -18 };
         private ModConfig cfg;
-        private SButton keyToCheck;
-        private bool showCaveItems;
-        private bool showAnimalDroppings;
-        private bool showHarvestableFlowers;
         private IDictionary<string, int> holdy = new Dictionary<string, int>();
         private IDictionary<string, int> holdy_previous = new Dictionary<string, int>();
         private IDictionary<string, SObject> ready_items = new Dictionary<string, SObject>();
@@ -33,14 +29,6 @@ namespace WhatsReady
         public override void Entry(IModHelper helper)
         {
             this.cfg = this.Helper.ReadConfig<ModConfig>();
-            keyToCheck = this.cfg.keyToCheck;
-            showCaveItems = this.cfg.showCaveItems;
-            showAnimalDroppings = this.cfg.showAnimalDroppings;
-            showHarvestableFlowers = this.cfg.showHarvestableFlowers;
-
-            holdy.Clear();
-            holdy_previous.Clear();
-            ready_items.Clear();
 
             helper.Events.Input.ButtonPressed += this.OnButtonPressed;
             helper.Events.GameLoop.TimeChanged += this.OnTimeChange;
@@ -60,14 +48,14 @@ namespace WhatsReady
 
             foreach (GameLocation location in GetGameLocations())
             {
-                if ((location is FarmCave && showCaveItems) || (!(location is FarmCave) && !showCaveItems))
+                if ((location is FarmCave && cfg.showCaveItems) || (!(location is FarmCave) && !cfg.showCaveItems))
                 {
                     if (location.IsFarm || location.IsGreenhouse)
                     {
                         OverlaidDictionary.ValuesCollection locationObjects = GetLocationObjects(location);
                         CheckMachineItems(locationObjects);
                         CheckCrops(location);
-                        if (showAnimalDroppings)
+                        if (cfg.showAnimalDroppings)
                             CheckAnimalDroppings(locationObjects);
 
                     }
@@ -78,7 +66,7 @@ namespace WhatsReady
             {
                 ShowNotification();
             }
-            
+
         }
 
         private void OnButtonPressed(object sender, ButtonPressedEventArgs e)
@@ -87,7 +75,15 @@ namespace WhatsReady
             if (!Context.IsWorldReady)
                 return;
 
-            if (e.Button.Equals(keyToCheck))
+            //if (e.Button.Equals(SButton.F5))
+            //{
+            //    int itemId = 430;
+            //    int x, y;
+            //    x = 74; y = 19;
+            //    Game1.getLocationFromName("Farm").dropObject(new StardewValley.Object(itemId, 1, false, -1, 0), new Vector2(x, y) * 64f, Game1.viewport, true, (Farmer)null);
+            //}
+
+            if (e.Button.Equals(this.cfg.keyToCheck))
             {
                 // print button presses to the console window
                 Monitor.Log($"{Game1.player.Name} pressed {e.Button}.", LogLevel.Debug);
@@ -98,14 +94,14 @@ namespace WhatsReady
 
                 foreach (GameLocation location in GetGameLocations())
                 {
-                    if ((location is FarmCave && showCaveItems) || (!(location is FarmCave) && !showCaveItems))
+                    if ((location is FarmCave && cfg.showCaveItems) || (!(location is FarmCave) && !cfg.showCaveItems))
                     {
                         if (location.IsFarm || location.IsGreenhouse)
                         {
                             OverlaidDictionary.ValuesCollection locationObjects = GetLocationObjects(location);
                             CheckMachineItems(locationObjects);
                             CheckCrops(location);
-                            if (showAnimalDroppings)
+                            if (cfg.showAnimalDroppings)
                                 CheckAnimalDroppings(locationObjects);
 
                         }
@@ -119,15 +115,34 @@ namespace WhatsReady
             }
         }
 
-        private IEnumerable<GameLocation> GetGameLocations()
+        private List<GameLocation> GetGameLocations()
         {
-            return Game1.locations
-                .Concat(
-                    from location in Game1.locations.OfType<BuildableGameLocation>()
-                    from building in location.buildings
-                    where building.indoors.Value != null
-                    select building.indoors.Value
-                );
+            List<GameLocation> gameLocations = new List<GameLocation>();
+            foreach (BuildableGameLocation location in Game1.locations.OfType<BuildableGameLocation>())
+            {
+                if (location.IsFarm)
+                {
+                    gameLocations.Add(location);
+
+                    foreach (Building building in location.buildings)
+                    {
+                        if (building.indoors.Value != null)
+                            gameLocations.Add(building.indoors.Value);
+                    }
+
+                }
+            }
+
+            foreach (GameLocation location in Game1.locations)
+            {
+                if (location is FarmCave && cfg.showCaveItems && !gameLocations.Contains(location))
+                    gameLocations.Add(location);
+
+                if (location.IsGreenhouse && !gameLocations.Contains(location))
+                    gameLocations.Add(location);
+            }
+
+            return gameLocations;
         }
 
         private OverlaidDictionary.ValuesCollection GetLocationObjects(GameLocation location)
@@ -162,6 +177,8 @@ namespace WhatsReady
 
         private void CheckAnimalDroppings(OverlaidDictionary.ValuesCollection locationObjects)
         {
+            List<SObject> truffles = new List<SObject>();
+
             foreach (SObject obj in locationObjects)
             {
 
@@ -170,7 +187,7 @@ namespace WhatsReady
                     Chest objItems = (Chest)obj.heldObject.Value;
                     foreach (SObject item in objItems.items)
                     {
-                        
+
                         if (animalDroppingCatIds.Contains(item.Category) || animalDroppingsIds.Contains(item.parentSheetIndex))
                         {
                             {
@@ -201,10 +218,74 @@ namespace WhatsReady
                         }
 
                         holdy[ready_item.name]++;
+
+                        if (ready_item.ParentSheetIndex == 430)
+                        {
+                            truffles.Add(ready_item);
+                        }
                     }
                 }
             }
+
+            if (truffles.Count > 0 && cfg.harvestTrufflesToGrabbers)
+                TruffleGrabber(truffles);
         }
+
+        private void TruffleGrabber(List<SObject> truffles)
+        {
+            GameLocation farmLocation = null;
+            List<Chest> grabbers = new List<Chest>();
+            List<GameLocation> locations = new List<GameLocation>(GetGameLocations());
+            
+            foreach (GameLocation location in locations)
+            {
+                if (location is Farm)
+                    farmLocation = location;
+
+                if (location.name.Contains("Barn"))
+                {
+                    foreach (SObject obj in GetLocationObjects(location))
+                    {
+
+                        if (obj.ParentSheetIndex == 165) //autograbber
+                        {
+                            Chest objItems = (Chest)obj.heldObject.Value;
+                            grabbers.Add(objItems);
+                        }
+                    }
+                }
+            }
+            
+            if (grabbers.Count > 0)
+            {
+                foreach (SObject truffle in truffles)
+                {
+                    foreach (Chest grabber in grabbers)
+                    {
+                        if (grabber.getRemainingStackSpace() > 0 || grabber.items.Contains(truffle))
+                        {
+                            if (grabber.items.Contains(truffle))
+                            {
+                                grabber.addToStack(truffle);
+                            }
+                            else
+                            {
+                                grabber.addItem(truffle);
+                            }
+
+                            farmLocation.destroyObject(truffle.tileLocation.Value, null);
+                            showMessage("Harvesting truffle to autograbber");
+                        }
+                        else
+                        {
+                            this.Monitor.Log("No available grabber spots");
+                        }
+                    }
+                }
+            }
+            else { this.Monitor.Log("No grabbers"); }
+        }
+
 
         private void CheckCrops(GameLocation location)
         {
@@ -217,7 +298,7 @@ namespace WhatsReady
                     if (hoeDirt.readyForHarvest())
                     {
                         SObject crop = GetItemByIndex(hoeDirt.crop.indexOfHarvest);
-                        if (showHarvestableFlowers || (!showHarvestableFlowers && crop.Category != -80))
+                        if (cfg.showHarvestableFlowers || (!cfg.showHarvestableFlowers && crop.Category != -80))
                         {
                             if (!holdy.ContainsKey(crop.name))
                             {
@@ -255,6 +336,7 @@ namespace WhatsReady
 
             }
         }
+
         public static void showMessage(string msg)
         {
             var hudmsg = new HUDMessage(msg, Color.SeaGreen, 5250f, true);
